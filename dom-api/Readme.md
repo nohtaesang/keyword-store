@@ -1,3 +1,41 @@
+* DOM
+    * The Document Object Model
+    * HTML, XML 문서의 프로그래밍 Interface 이다.
+    * 문서의 구조화된 표현을 제공한다.
+    * 프로그래밍언어가 DOM 구조에 접근할 수 있는 방법을 제공한다.
+    * 그로인해 문서 구조, 스타일, 내용 등을 변경할 수 있게 돕는다.
+    * 이 문서는 웹 브라우저를 통해 그 내용이 해석되어 웹 브라우저 화면에 나타나거나 HTML 소스 자체로 나타난다.
+    * 자바스크립트는 document(문서)와 element(요소)에 접근하기 위해 DOM을 사용한다.
+    * DOM은 프로그래밍 언어는 아니다.
+    * 하지만 DOM이 없다면 자바스크립트 언어는 문서들에 대한 정보를 갖지 못한다.
+    * 문서의 모든 element는 문서를 위한 document object model의 한 부분이다
+    * 어떻게 DOM에 접근할 수 있는가?
+        * 각각의 브라우저는 자신만의 방법으로 DOM을 구현했다.
+        * 스크립트를 작성할 때, 문서 자체를 조작하거나 문서의 children을 얻기 위해 document 또는 window elements를 위한 API를 즉시 사용할 수 있다.
+    * 중요한 데이터 타입들
+        * document
+            * 이 object는 root document object 자체이다.
+        * element
+            * DOM API의 member에 의해 return 된 element 또는 element type의 node를 의미한다.
+        * nodeList
+            * elements의 배열
+                * list.item(1)
+                * list[1]
+        * attribute
+            * attribute에 대한 특별한 인터페이스를 노출하는 object reference이다.
+            * DOM에서 elements와 같은 nodes이다.
+    * DOM interfaces
+        * 많은 objects가 여러 개의 interfaces와 연관되어 있다.
+        * HTML element는 DOM 이 연관되어 있는 한 nodes 트리에서 하나의 node이다.
+        * document
+            * root document 자체라고 할 수 있다.
+        * window
+            * window object는 브라우저와 같다고 할 수 있다.
+        * generic Node interface 로부터 상속받은 element와 node, element interface가 협력하여 각각의 elements에서 상요할 수 있는 수많은 methods와 properties를 제공한다.
+
+
+
+
 * document.getElementById('str')
     * 문서에서 str과 일치하는 id를 가진 속성을 찾는다.
     * 이를 나타내는 Element 객체를 반환한다.
@@ -68,9 +106,6 @@
         * entries()
             * iterator 를 반환한다.
             * 코드가 콜렉션에 포함된 모든 키/값(노드) 쌍을 순회할 수 있도록 한다.
-
-
-    
 
 * Node
     * 여러 가지 DOM 타입들이 상속하는 인터페이스이다.
