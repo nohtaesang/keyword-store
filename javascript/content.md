@@ -1871,3 +1871,372 @@
         * 프라미스 연쇄는 비동기 흐름을 순차적으로 표현하는 더 나은 방법이다.
         * 덕분에 우리 두뇌가 비동기 자바스크립트 코드를 좀 더 효율적으로 계획/관리할 수 있다.
         
+## 제너레이터
+* 어떻게 하면 비동기 흐름 제어를 순차적/동기적 모습으로 나타낼 수 있을까
+    * 자바스크립트 개발자 대부분이 당연히 그러리라고 믿겠지만 일단 함수가 실행되기 시작하면 완료될 때까지 계속 실행되며 도중에 다른 코드가 끼어들어 실행되는 법이 없다고 알고 있을것이다.
+    * 그런데 ES6부터 완전-실행 법칙을 따르지 않는, 제너레이터라는 전혀 새로운 종류의 함수가 등장했다.
+    ```
+    var x = 1;
+    function foo(){
+        x++;
+        bar();
+        console.log('x: ',x)
+    }
+    function bar(){
+        x++;
+    }
+    foo(); //3
+    ```
+    * 틀림 없이 bar()는 x++와 console.log(x)사이에서 실행될 것이다.
+    * 자바스크립트는 선점형 멀티스레드 언어가 아니기 때문에 끼어들 수 없다.
+    * 하지만 foo()자체가 어떤 코드 부분에서 멈춤 신호를 줄 수 만 있다면 이러한 끼어들기(interruption)를 협동적(cooperative) 형태로 나타낼 수 있다.
+        * 협동적이라는 단어를 쓴 이유는 코드의 멈춤 위치를 나타내는 ES6 구문이 yield(양도) 이기 떄문이다.
+        * 즉, 제어권을 친절하게 협력적으로 양도한다는 뜻이다.
+    ```
+    var x = 1;
+    function *foo(){
+        x++;
+        yield;
+        console.log("x: ",x);
+    }
+    function bar(){
+        x++;
+    }
+    ```
+    * 자, 그럼 foo()의 yield 지점에서 bar()는 어떻게 실행될까?
+        ```
+        var it = foo();
+        it.next();
+        x; //2
+        bar();
+        x; //3
+        it.next(); // x: 3
+        ```
+        * it = foo() 할당으로 *foo() 제너레이터가 실행되는 건 아니다.
+        * 제너레이터 실행을 제어할 이터레이터만 마련한다.
+        * 첫 번쨰 it.next()가 *foo() 제너레이터를 시작하고 *foo() 첫쨰 줄의 x++가 실행된다.
+        * 첫 번째 it.next()가 완료되는 yield 문에서 *foo()는 멈춘다.
+        * *foo()는 실제로 실행 중이지만 멈춰있는 상태다.
+        * x값을 출력해보니 2이다.
+        * bar()를 호출하면 x++에서 x 값은 하나 증가한다.
+        * x 값을 다시 확인하면 지금은 3이다.
+        * 마지막 it.next() 호출부에 의해 *foo() 제너레이터는 좀 전에 멈췄던 곳에서 재개되어 console.log() 실행 후 현재 x 값 3을 콘솔창에 표시한다.
+    * 분명 foo() 가 시작됐지만 '완전-실행' 되지 않고 yield 문에서 잠깐 멈추었다.
+    * 나중에 foo() 를 재개하여 완료하지만 꼭 이렇게 해야 할 필요는 없다.
+    * 제너레이터는 1 회 이상 시작/실행을 거듭할 수 있으면서도 반드시 끝까지 실행해야 할 필요는 없는 특별한 함수이다.
+    * 비동기 흐름을 제어하는 제너레이터 패턴을 완성하기 위한 가장 기초적인 개념이다.
+
+* 입력과 출력
+    * 함수는 함수인지라 기본적인 체계, 즉 인자를 입력 받고 어떤 값을 반환하는 기능은 일반 함수와 같다.
+    ```
+    function *foo(x,y){
+        return x*y
+    }
+    var it = foo(6,7)
+    var res = it.next()
+    res.value; // 42
+    ```
+    * 그런데 여타 함수와 제너레이터의 호출 방법이 다른 걸 알 수 있다.
+    * foo(6, 7) 은 당연해 보이는데 제너레이터 *foo()는 일반 함수와는 달라서 이것만으로는 실행되지 않는다.
+    * 그래서 제너레이터를 제어하는 '이터레이터' 객체를 만들어 변수 it 에 할당하고 it.next() 해야 *foo() 제너레이터가 현재 위치에서 다음 yield 또는 제너레이터 끝까지 실행할 수 있다.
+    * next()의 결괏값은 *foo()가 반환한 값을 value 프로퍼티에 저장한 객체다.
+    * 즉, yield는 실행 도중에 제너레이터로부터 값을, 일종의 중간 반환 값 형태로 돌려준다.
+
+* 반복 메세징
+    * 인자를 받아 결괏값을 내는 기능 이외에도 제너레이터에는 yield와 next()를 통해 입력/출력 메시지를 주고 받는, 강력하고 감탄스러운 기능이 탑재되어 있다.
+        ```
+        function *foo(x){
+            var y = x * (yield);
+            return y
+        }
+        var it = foo(6)
+        it.next();
+        var res = it.next(7)
+        res.value; //42
+        ```
+        * 먼저, 인자 x 자리에 6을 넘기고 it.next()를 호출하여 *foo()를 시작한다.
+        * *foo()에서 var y=x ... 문이 처리될 즈음 yield 표현식에서 걸린다.
+        * 여기서 *foo()는 실행을 멈추고 yield 표현식에 해당하는 결괏값을 달라고 호출부 코드에 요청한다.
+        * 그리고 it.next(7)을 호출하면 7 값이 yield 표현식의 결괏값이 되도록 전달한다.
+        * 따라서 결과적으로 할당문은 var y = 6 * 7 이 된다.
+    * yield... 와 next()는 제너레이터 실행 도중 양방향 메시징 시스템으로 가능하다.
+    * 제너레이터 끝에 return 문이 따로 없으면 return 문이 있다고 치고 암시적으로 처리한다.
+        * return undefined
+    * 이러한 질의 응답 체계는 매우 강력하다.
+* 다중 이터레이터
+    * 구문 사용법만 놓고 보면 이터레이터로 제너레이터를 제어하는 건 선언된 제너레이터 함수 자체를 제어하는 것처럼 보인다.
+    * 그러나 이터레이터를 생성할 때마다 해당 이터레이터가 제어할 제너레이터의 인스턴스 역시 암시적으로 생성된다는 사실을 지나치기 쉽다.
+    * 같은 제너레이터의 인스턴스를 동시에 여러 개 실행할 수 있고 인스턴스끼리 상호 작용도 가능하다.
+    ```
+    function *foo(){
+        var x = yield 2;
+        z++;
+        var y = yield( x * z )
+        console.log(x, y, z)
+    }
+    var z = 1;
+    var it1 = foo();
+    var it2 = foo();
+    var val1 = it1.next().value // 2
+    var val2 = it2.next().value // 2
+    val1 = it1.next(val2*10).value // 40 
+    val2 = it2.next(val1*5).value // 600
+    it1.next( val2/2 ); // 20, 300, 3
+    it2.next( val1/4 ); // 200, 10, 3
+    ```
+* 인터리빙
+    ```
+    var a = 1;
+    var b = 2;
+    function foo(){
+        a++;
+        b = b * 1;
+        a = b + 3;
+    }
+    function bar(){
+        b--;
+        a = 8 + b;
+        b = a * 2;
+    }
+    ```
+    * 일반 자바스크립트 함수 foo(), bar() 둘 중 하나는 다른 함수보다 먼저 완전-실행될 것이다.
+    * 하지만 foo()의 개별 문을 bar()에 인터리빙 하여 실행하는 건 불가능하다.
+    * 따라서 실행 결과는 두 가지만 가능하다.
+    * 반면에 제너레이터는 문 사이에서도 인터리빙 할 수 있다.
+    ```
+    var a = 1;
+    var b = 2;
+    function* foo(){
+        a++;
+        yield;
+        b=b*a;
+        a=(yiled b) + 3;
+    }
+    function* bar(){
+        b--;
+        yield;
+        a=(yield 8) +b
+        b = a * (yield 2);
+    }
+    ```
+    * 이터레이터를 제어하는 step() 헬퍼
+    ```
+    function step(gen){
+        var it = gen();
+        var last;
+
+        return function(){
+            last = it.next(last).value;
+        }
+    }
+    ```
+
+* 제조기와 이터레이터
+    ```
+    var gimmeSomething = (function(){
+        var nextVal;
+        return function(){
+            if(nextVal === undefined){
+                nextVal = 1;
+            }else{
+                nextVal = (3 * nextVal) + 6;
+            }
+            return nextVal;
+        }
+    })();
+    gimmeSomething(); // 1
+    gimmeSomething(); // 9
+    gimmeSomething(); // 33
+    gimmeSomething(); // 105
+    ```
+    * 이런 작업들은 이터레이터로 해결 가능한, 아주 일반적인 설계 패턴이다.
+    * 이터레이터는 생산자로부터 일련의 값들을 받아 하나씩 거치기 위한, 명확한 인터페이스이다.
+    ```
+    var something = (function(){
+        var nextVal;
+        return{
+            // for...of 루프에서 필요하다
+            [Symbol.iterator]: function(){return this},
+            // 표준 이터레이터 인터페이스 메서드
+            next: function(){
+                if(nextVal === undefined){
+                    nextVal=1;
+                }else{
+                    nextVal = (3*nextVal)+6
+                }
+                return {done: false, value:nextVal}
+            }
+        }
+    })()
+    ```
+    * next()를 호출하면 프로퍼티가 2개인 객체가 반환된다.
+    * done 은 이터레이터 완료 상태를 가리키는 불리언 값이고 value는 순회 값이다.
+    * for...of 루프는 매번 자동으로 next()를 호출하다가 done:true를 받으면 그 자리에서 멈춘다.
+    
+* 이터러블
+    * 이전 예제 something 처럼 next() 메서드로 인터페이스하는 객체를 이터레이터라고 한다.
+    * 그러나 순회 가능한 이터레이터를 포괄한 객체, 이터러블이 더 밀접한 용어다.
+    * ES6 부터 이터러블은 특별한 ES6 심볼값 Symbol.iterator 라는 이름을 가진 함수를 지니고 있어야 이 함수를 호출하여 이터러블에서 이터레이터를 가져올 수 있다.
+    * 필수 요건은 아니지만 일반적으로 함수를 호출할 때마다 방금 만든 새 이터레이터를 내어준다.
+    * for...of 루프는 자동으로 Symbol.iterator 함수를 호출하여 이터레이터를 생성한다.
+    * something 정의부에 이런 코드가 있었다.
+    ```
+    [Symbol.iterator]: function(){return this}
+    ```
+    * 약간 헷갈리게 생겼지만 something 값(something의 이터레이터 인터페이스)을 이터러블로 만드는 코드이다.
+    * 이제 something은 이터러블이면서 동시에 이터레이터이다.
+    * for..of 구문은 something이 이터러블이라는 전제하에 Symbol.iterator 함수가 있는지 찾아보고 호출한다.
+    * 이 함수는 그냥 return this 하여 돌려주기 떄문에 for...of 루프는 속사정을 알 길이 없다.
+
+* 제너레이터와 이터레이타ㅓ
+    * 제너레이터는 일종의 값을 생산하는 공장이다.
+    * 이렇게 만들어진 값들은 이터레이터 인터페이스의 next()를 호출하여 한번에 하나씩 추출할 수 있다.
+    * 따라서 엄밀히 말하면 제너레이터 자체는 이터러블이 아니지만 아주 흡사해서 제너레이터를 실행하면 이터레이터를 돌려받게 된다.
+    ```
+    function* foo(){...}
+    var it = foo();
+    ```
+    * 그러므로 무한 수열 생산기 something은 다음과 같이 구현할 수 있다.
+    ```
+    function *something(){
+        var nextVal;
+        while(true){
+            if(nextVal === undefined){
+                nextVal=1;
+            }else{
+                nextVal=(3*nextVal) +6;
+            }
+            yield nextVal
+        }
+    }
+    ```
+    * 보통 자바스크립트 프로그램에서 while...true 루프를 break, return 문도 없이 사용하면 자칫 동기적인 무한 루프에 빠져 브라우저 UI를 멈추게 할 수 있다.
+    * 그러나 제너레이터는 루프 안에 yield만 있으면 전혀 염려할 일이 없다.
+    * 어차피 제너레이터가 순회할 때마다 멈추면서 메인 프로그램 또는 이벤트 루프 큐에 바톤을 넘겨줄 테니 말이다.
+    * 제너레이터는 yield를 만나면 일단 멈추기 떄문에 function* something()의 상태는 그대로 유지된다.
+    * 다시 말해, 호출할 때마다 변수 상탯값을 보존하기 위해 습관적으로 클로저 구문을 남발할 필요가 없다.
+    * 개발자가 직접 이터레이터 인터페이스를 작성할 필요가 없으므로 단순할 뿐만 아니라 사실 내용을 더 분명하게 표현한 추론적인 코드다.
+        * while...true 루프 하나만 봐도 이 제너레이터의 목적이 무한 실행 중 언제라도 요청을 하면 값을 만들어 내는 것이라는 사실을 알 수 있다.
+    * 화려한 새 제너레이터 *something()을 for...of 루프에 얹어도 기본적으로 작동 방식은 똑같다.
+    ```
+    for(var v of something()){
+        console.log(v)
+        if(v >500) break
+    }
+    ```
+    * 전처럼 something을 어떤떤 값으로 참조한 게 아니라 *something() 제너레이터를 호출해서 for...of 루프가 사용할 이터레이터를 얻는다.
+    * 그런데 for(var v of something) 처럼 쓴다면?
+        * 여기서 something은 제너레이터지 이터러블이 아니다.
+    * something() 을 호출하면 이터레이터가 만들어지지만 정작 for...of 루프가 원하는 건 이터러블이 아닌가?
+        * 제너레이터의 이터레이터에도 Symbol.iterator 함수가 있고 기본적으로 return this를 한다.
+        * 한마디로 제너레이터의 이터레이터도 이터러블이다.
+* 제너레이터 멈춤
+    * 좀 전에 *something() 제너레이터의 이터레이터 인터페이스는 루프 내에서 break를 호출한 이후에 영원히 정지 상태가 될 것 같아 보인다.
+    * 그러나 이 떄 알아서 처리해주는 숨겨진 기능이 하나 있다.
+    * 일반적으로 break, return 또는 잡히지 않은 예외로 인해 for...of 루프가 비정상 완료되면 제너레이터의 이터레이터를 중지하도록 신호를 준다.
+        * 엄밀히는 루프가 정상 완료될 경우에도 for...of 루프는 이터레이터에게 신호한다.
+        * 제너레이터 관점에서 어차피 자신의 이터레이터가 먼저 끝나야 for...of 루프 역시 완료되므로 별 의미는 없다.
+    * for...of 루프가 자동으로 전송하는 신호를 수동으로 이터레이터에 보내야 할 경우도 있다.
+    * 이럴 떄 return()을 호출한다.
+    * 제너레이터가 외부적으로 완료된 다음에도 내부에서 try...finally 절을 사용하면 실행할 수 있다.
+    * 이는 자원(DB 접속)을 정리할 떄 유용한 기법이다.
+    ```
+    function *something(){
+        try{
+        }
+        // 정리 코드
+        finally{
+
+        }
+    }
+    ```
+    * for...of 루프에서 break 하면 finally 절로 이동할 것이다.
+    * 외부에서 return() 문을 써서 수동으로 제너레이터 인스턴스를 멈추게 할 수 있다.
+    ```
+    var it = something()
+    for(var v of it){
+        console.log(v);
+        if(v>500){
+            console.log(it.return('hello world').value)
+        };
+    }
+    ```
+    * it.return() 하면 제너레이터 실행은 즉시 끝나고 finally 절로 옮겨간다.
+    * 또 return()에 전달한 인자값이 반환 값이 되어 예제처럼 'hello world'가 바로 출력된다.
+    * 제너레이터의 이터레이터는 이미 done:true 이므로 break문을 넣지 않아도 되며 for...of 루프는 다음 순회를 끝으로 막을 내린다.
+* 제너레이터를 비동기적으로 순회
+    ```
+    function *main(){
+        try{
+            var text = yield foo(11, 31);
+            console.log(text)
+        }catch(err){
+            console.log(err)
+        }
+    }
+    var it = main();
+    it.next();
+    ```
+    * yield foo(11, 31) 에서 foo(11, 31) 호출이 일어나고 반환 값은 없으므로 (yield undefined) data를 요청하기 위해 호출을 했지만 실제로는 yield undefined를 수행한 셈이다.
+    * 아직은 이 코드가 뭔가 의미있는 일을 하기 위해 yield된 값이 필요한 상태는 아니니 괜찮다.
+    * 여기서 yield는 메시지 전달 수단이 아닌 멈춤/중단을 위한 흐름 제어 수단으로 사용한 것이다.
+    * 실제로는 제너레이터가 다시 시작한 이후로 메시지 전달은 단방향으로만 이뤄진다.
+    * 따라서 yield를 만나 멈추면서 제너레이터는 "내가 나중에 어떤 값을 갖고 와서 변수 text에 할당해야 하나요?" 라고 묻는다.
+        * 누구에게 하는 질문일까?
+        * AJAX 요청이 성공하면 다음 한 줄이 실행된다.
+        ```
+        it.next( data )
+        ```
+        * 응답 데이터 수신과 동시에 제너레이터는 재개되고 좀 전에 멈췄던 yield 표현식은 이 응답 데이터로 즉시 채워진다.
+        * 그 뒤, 제너레이터 코드를 다시 시작하면서 이 값은 지역 변수에 text에 할당된다.
+* 동기적 에러 처리
+    * it.throw(err)
+    * 이러한 제너레이터의 yield-멈춘 기능은 비동기 함수 호출로부터 넘겨받은 값을 동기적인 형태로 return 하게 해줄 뿐만 아니라 비동기 함수 실행 중 발생한 에러를 동기적으로 catch 할수 있게도 해준다.
+    ```
+    function *main(){
+        var x = yield 'Hello World!';
+        yield x.toLowerCase();
+    }
+    var it = main();
+    it.next().value; // Hello World
+
+    try{
+        it.next(42)
+    }
+    catch(err){
+        console.log(err)
+    }
+    ```
+    * 
+* 제너레이터 + 프라미스
+    * 이터레이터는 프라미스가 귀결 되기를 리스닝하고 있다가 제너레이터를 이룸 메시지로 재개하든지 아니면 제너레이터로 버림 사유로 채워진 에러를 던진다.
+    * 프라미스, 제너레이터를 최대한 활용하는 가장 자연스러운 방법은 우선 프라미스를 yield한 다음 이 프라미스로 제너레이터의 이터레이터를 제어하는 것이다,
+    ```
+    function foo(x, y){
+        return request(
+            'http:// x / y '
+        );
+    }
+
+    function *main(){
+        try{
+            var text = yield foo(11, 31);
+            console.log(text)
+        }catch(err){
+            console.log(err)
+        }
+    }
+
+    var it = main();
+    var p = it.next().value;
+    p.then(
+        function(text){
+            it.next(text);
+        },
+        function(err){
+            it.throw(err)
+        }
+    )
+    ```
+    * 
+
